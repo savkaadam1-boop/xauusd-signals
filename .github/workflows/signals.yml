@@ -1,0 +1,42 @@
+name: XAUUSD signaly
+
+on:
+  schedule:
+    # Kazdych 5 minut. GitHub to berie ako "najskor o 5 minut" -
+    # obcas to mesknie o par minut, to je normalne.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:     # umozni spustit rucne tlacidlom
+
+permissions:
+  contents: write        # aby si bot mohol ulozit state.json
+
+concurrency:
+  group: signals
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalacia kniznic
+        run: pip install --quiet yfinance pandas numpy requests
+
+      - name: Kontrola signalu
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python signal_bot.py
+
+      - name: Ulozenie stavu
+        run: |
+          git config user.name  "signal-bot"
+          git config user.email "signal-bot@users.noreply.github.com"
+          git add state.json || true
+          git diff --staged --quiet || git commit -m "stav [skip ci]"
+          git push || true
