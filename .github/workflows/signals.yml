@@ -6,6 +6,11 @@ on:
     # obcas to mesknie o par minut, to je normalne.
     - cron: "*/5 * * * *"
   workflow_dispatch:     # umozni spustit rucne tlacidlom
+    inputs:
+      test:
+        description: "Poslat testovaciu spravu do Telegramu"
+        type: boolean
+        default: false
 
 permissions:
   contents: write        # aby si bot mohol ulozit state.json
@@ -31,6 +36,7 @@ jobs:
         env:
           TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_MSG:         ${{ inputs.test }}
         run: python signal_bot.py
 
       - name: Ulozenie stavu
