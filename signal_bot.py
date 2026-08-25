@@ -64,6 +64,7 @@ STATE_FILE    = "state.json"
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TG_CHAT  = os.environ.get("TELEGRAM_CHAT_ID", "")
 DRY_RUN  = os.environ.get("DRY_RUN", "") == "1"
+TEST_MSG = os.environ.get("TEST_MSG", "").lower() in ("1", "true", "yes")
 
 
 # ---------------------------------------------------------------- data
@@ -354,6 +355,18 @@ def save_state(st):
 
 # ---------------------------------------------------------------- main
 def main():
+    if TEST_MSG:
+        ok = send(
+            "TEST\n"
+            "------------------------\n"
+            "Spojenie GitHub -> Telegram funguje.\n"
+            "Toto nie je obchodny signal.\n"
+            "Od teraz ti pridu len skutocne signaly:\n"
+            "EMA 9/21 cross pri zone, RR aspon 1:1.5."
+        )
+        print("test odoslany" if ok else "test ZLYHAL")
+        return 0 if ok else 1
+
     ticker, df = fetch()
     if df is None:
         print("[chyba] ziadne data")
