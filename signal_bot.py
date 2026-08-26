@@ -65,6 +65,7 @@ TG_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TG_CHAT  = os.environ.get("TELEGRAM_CHAT_ID", "")
 DRY_RUN  = os.environ.get("DRY_RUN", "") == "1"
 TEST_MSG = os.environ.get("TEST_MSG", "").lower() in ("1", "true", "yes")
+HEARTBEAT_HOUR = int(os.environ.get("HEARTBEAT_HOUR", "20"))   # UTC
 
 
 # ---------------------------------------------------------------- data
@@ -321,6 +322,82 @@ def find_signal(df):
     }
 
 
+# --------------------------------------------------------- diagnostika
+def last24_stats(df):
+    """Prejde poslednych 24 h a spocita, kde signaly zanikali.
+    Rovnaka logika ako find_signal, len bez odosielania."""
+    end = last_closed_index(df)
+    start = max(PIV_LEFT + PIV_RIGHT + SLOW_EMA + 5, end - 288)
+
+    crosses = zone_ok = rr_ok = 0
+    for i in range(start, end + 1):
+        f_now, f_prev = df["ema_f"].iloc[i], df["ema_f"].iloc[i - 1]
+        s_now, s_prev = df["ema_s"].iloc[i], df["ema_s"].iloc[i - 1]
+        up = f_prev <= s_prev and f_now > s_now
+        dn = f_prev >= s_prev and f_now < s_now
+        if not up and not dn:
+            continue
+        crosses += 1
+
+        atr = float(df["atr"].iloc[i])
+        if not np.isfinite(atr) or atr <= 0:
+            continue
+        close = float(df["Close"].iloc[i])
+        is_long = bool(up)
+        tol = atr * SR_TOL_ATR
+
+        highs, lows = swings(df, i)
+        cands = [(p, k) for p, k, _ in cluster_zones(highs, lows, tol)]
+        cands += extra_levels(df, i)
+
+        best = None
+        for price, kind in cands:
+            d = abs(close - price)
+            if d > atr * CONF_MAX_ATR:
+                continue
+            if REQUIRE_SIDE:
+                if is_long and price > close + tol:
+                    continue
+                if not is_long and price < close - tol:
+                    continue
+            if best is None or d < best[0]:
+                best = (d, price, kind)
+        if best is None:
+            continue
+        zone_ok += 1
+
+        lo_w = float(df["Low"].iloc[max(0, i - SL_SWING_BARS + 1): i + 1].min())
+        hi_w = float(df["High"].iloc[max(0, i - SL_SWING_BARS + 1): i + 1].max())
+        buf = atr * SL_BUFFER_ATR
+        if is_long:
+            sl = min(lo_w - buf, close - atr * SL_MIN_ATR)
+        else:
+            sl = max(hi_w + buf, close + atr * SL_MIN_ATR)
+        risk = abs(close - sl)
+        if risk <= 0:
+            continue
+
+        eps = atr * 0.10
+        ok = False
+        ahead = []
+        for price, kind in (cands + [(p, "sw") for p, _ in highs]
+                            + [(p, "sw") for p, _ in lows]):
+            if is_long and price > close + eps:
+                ahead.append(price)
+            elif not is_long and price < close - eps:
+                ahead.append(price)
+        ahead.sort(key=lambda x: abs(x - close))
+        for price in ahead:
+            rr = abs(price - close) / risk
+            if rr >= MIN_RR:
+                ok = rr <= MAX_RR
+                break
+        if ok:
+            rr_ok += 1
+
+    return crosses, zone_ok, rr_ok
+
+
 # ------------------------------------------------------------ telegram
 def send(text):
     print("SPRAVA:\n" + text)
@@ -374,11 +451,31 @@ def main():
 
     df = add_indicators(df)
     sig = find_signal(df)
+
+    st = load_state()
+
+    # --- denny odpocet, aby si vedel, ze bot zije -------------------
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if (datetime.now(timezone.utc).hour >= HEARTBEAT_HOUR
+            and st.get("last_heartbeat") != today):
+        c, z, r = last24_stats(df)
+        send(
+            f"DENNY ODPOCET  {datetime.now(timezone.utc):%d.%m.}\n"
+            f"------------------------\n"
+            f"crossov spolu     : {c}\n"
+            f"z toho pri zone   : {z}\n"
+            f"z toho s RR >= {MIN_RR}: {r}\n"
+            f"------------------------\n"
+            f"Bot zije. Ak je posledny riadok 0, filtre su prisne,\n"
+            f"nie pokazene."
+        )
+        st["last_heartbeat"] = today
+        save_state(st)
+
     if sig is None:
         print("[info] ziadny signal")
         return 0
 
-    st = load_state()
     if st.get("last_bar") == sig["bar"]:
         print("[info] tento signal uz bol odoslany")
         return 0
