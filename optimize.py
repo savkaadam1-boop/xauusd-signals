@@ -12,9 +12,10 @@ To je jediny sposob, ako to rozlisit.
 import itertools, os, sys
 import numpy as np, pandas as pd, requests, yfinance as yf
 
-TICKERS  = {"NQ=F": "Nasdaq", "ES=F": "S&P 500", "GC=F": "Zlato"}
-INTERVAL = "5m"
-PERIOD   = "60d"
+TICKERS  = {"NQ=F": "Nasdaq", "ES=F": "S&P 500", "GC=F": "Zlato",
+            "YM=F": "Dow", "CL=F": "Ropa"}
+INTERVAL = os.environ.get("INTERVAL", "1h")
+PERIOD   = os.environ.get("PERIOD", "730d")
 TRAIN_FRAC = 0.60
 
 PIV, SR_TOL, SR_MIN_TOUCH = 6, 0.40, 3
@@ -199,8 +200,11 @@ def main():
                        f"{n1:>6}{pf1:>7.2f}{e1:>+7.2f}{n2:>6}{pf2:>7.2f}{e2:>+7.2f}")
         if rows:
             top = rows[:8]
-            survived = sum(1 for r in top if r[3] > 1.10 and r[4] >= 5)
-            out.append(f"z 8 najlepsich z ladenia obstalo na overeni: {survived}/8")
+            prof1 = sum(1 for r in rows if r[0] > 1.10 and r[1] >= 30)
+            survived = sum(1 for r in top if r[0] > 1.10 and r[3] > 1.10 and r[4] >= 20)
+            out.append(f"kombinacii ziskovych uz na LADENI (PF>1.10, n>=30): "
+                       f"{prof1}/{len(rows)}")
+            out.append(f"z 8 najlepsich obstalo aj na OVERENI: {survived}/8")
 
     out.append("")
     out.append("STLPCE:  vlavo od || = LADENIE,  vpravo = OVERENIE")
