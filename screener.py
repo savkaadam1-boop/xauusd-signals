@@ -26,9 +26,17 @@ SLS = [1.0, 1.5, 2.0]
 
 
 def fetch(t):
-    df = yf.download(t, interval=INTERVAL, period=PERIOD,
-                     progress=False, auto_adjust=False)
-    if df is None or len(df) < 1000:
+    try:
+        df = yf.download(t, interval=INTERVAL, period=PERIOD,
+                         progress=False, auto_adjust=False)
+    except Exception as e:
+        print(f"  CHYBA pri stahovani {t}: {type(e).__name__}: {e}")
+        return None
+    if df is None or len(df) == 0:
+        print(f"  {t}: yfinance vratil prazdne data")
+        return None
+    if len(df) < 1000:
+        print(f"  {t}: len {len(df)} sviecok, to je malo (treba 1000+)")
         return None
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
