@@ -21,7 +21,7 @@ PERIOD   = os.environ.get("PERIOD", "730d")
 TRAIN_FRAC = 0.60
 MAX_HOLD   = 48
 SPREAD_R   = 0.05
-RRS = [1.5, 2.0, 3.0]
+RRS = [1.0, 1.5, 2.0, 3.0]
 SLS = [1.0, 1.5, 2.0]
 
 
@@ -175,13 +175,15 @@ def simulate(P, sig, slm, rr, i0, i1):
 
 def stats(rs):
     if len(rs) < 5:
-        return len(rs), float("nan"), float("nan"), float("nan")
+        n = float("nan")
+        return len(rs), n, n, n, n
     a = np.array(rs, dtype=float)
     w, ls = a[a > 0].sum(), -a[a < 0].sum()
     pf = w / ls if ls > 0 else float("inf")
     sd = a.std(ddof=1)
     t = a.mean() / (sd / math.sqrt(len(a))) if sd > 0 else 0.0
-    return len(a), pf, a.mean(), t
+    wr = (a > 0).sum() / len(a) * 100.0
+    return len(a), pf, a.mean(), t, wr
 
 
 def fmt(x, w=6, dec=2, sign=False):
@@ -210,8 +212,8 @@ def main():
     print("=" * 74)
     print(f"{'STRATEGIA':<22}{'RR':>4}{'SLxATR':>7}"
           f"{'| n':>7}{'PF':>6}{'expR':>7}"
-          f"{'|| n':>7}{'PF':>6}{'expR':>7}{'t':>6}")
-    print("-" * 74)
+          f"{'|| n':>7}{'PF':>6}{'expR':>7}{'WR%':>6}{'t':>6}")
+    print("-" * 80)
 
     for label, fn in STRATS:
         sigs = {k: fn(P) for k, P in data.items()}
@@ -223,26 +225,29 @@ def main():
                     sp = int(P["n"] * TRAIN_FRAC)
                     tr += simulate(P, sigs[k], slm, rr, 0, sp)
                     te += simulate(P, sigs[k], slm, rr, sp, P["n"])
-                n1, pf1, e1, _ = stats(tr)
+                n1, pf1, e1, _, w1 = stats(tr)
                 if n1 < 40:
                     continue
-                n2, pf2, e2, t2 = stats(te)
-                cand = (pf1, rr, slm, n1, e1, n2, pf2, e2, t2)
+                n2, pf2, e2, t2, w2 = stats(te)
+                cand = (pf1, rr, slm, n1, e1, n2, pf2, e2, t2, w2)
                 if best is None or cand[0] > best[0]:
                     best = cand
         if best is None:
             print(f"{label:<22}   malo obchodov")
             continue
-        pf1, rr, slm, n1, e1, n2, pf2, e2, t2 = best
+        pf1, rr, slm, n1, e1, n2, pf2, e2, t2, w2 = best
         print(f"{label:<22}{rr:>4.1f}{slm:>7.1f}"
               f"{n1:>7}{fmt(pf1)}{fmt(e1, 7, 2, True)}"
-              f"{n2:>7}{fmt(pf2)}{fmt(e2, 7, 2, True)}{fmt(t2, 6, 1, True)}")
+              f"{n2:>7}{fmt(pf2)}{fmt(e2, 7, 2, True)}"
+              f"{fmt(w2, 6, 1)}{fmt(t2, 6, 1, True)}")
 
-    print("-" * 74)
+    print("-" * 80)
     print("vlavo od |  = LADENIE (vyber nastavenia)")
     print("vpravo od || = OVERENIE (jedine, co plati)")
     print("t = t-statistika overenia. Pod 2.0 = neodlisitelne od nahody.")
     print("NAHODA je kontrola: strategia pod nou nema ziadnu hodnotu.")
+    print("WR% = win rate na overeni. Vsimni si, ze vysoky WR (RR 1.0)")
+    print("NEZNAMENA vyssi zisk - expR je to, na com zalezi.")
 
 
 if __name__ == "__main__":
