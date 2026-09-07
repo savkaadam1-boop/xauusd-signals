@@ -13,6 +13,18 @@ jobs:
         with:
           python-version: "3.11"
       - name: Instalacia kniznic
-        run: pip install --quiet yfinance pandas numpy
+        run: pip install --quiet --upgrade yfinance curl_cffi pandas numpy
+      - name: Diagnostika dat
+        run: |
+          python - <<'PY'
+          import yfinance as yf
+          print("yfinance verzia:", yf.__version__)
+          for t in ["NQ=F", "ES=F", "GC=F"]:
+              try:
+                  d = yf.download(t, interval="1h", period="730d", progress=False)
+                  print(t, "->", 0 if d is None else len(d), "sviecok")
+              except Exception as e:
+                  print(t, "-> CHYBA:", type(e).__name__, e)
+          PY
       - name: Screener
         run: python screener.py
